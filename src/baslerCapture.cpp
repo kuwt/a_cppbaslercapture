@@ -6,13 +6,88 @@
 
 #include <pylon/PylonIncludes.h>
 #include <opencv2/opencv.hpp>
-#include "baselerCapture.h"
+#include <mutex>
+#include <thread>
+#include <chrono>
+#include <condition_variable>
+
+#include "baslerCapture.h"
+
 const char cameraModelName[] = "daA1280-54um";
 
 using namespace Pylon;
 using namespace GenApi;
 
 static bool	g_bPylonAutoInitTerm = false;
+static std::mutex g_mu_Grab;
+static std::mutex g_mu_state;
+
+class ImageCache
+{
+public:
+	~ImageCache() {}
+
+	void setNumOfImage(int num)
+	{
+		std::lock_guard<std::mutex> lk(m_mu_imageCacheNumOfImage);
+		m_NumImages = num;
+	}
+	int getNumOfImage()
+	{
+		std::lock_guard<std::mutex> lk(m_mu_imageCacheNumOfImage);
+		return m_NumImages;
+	}
+
+	void recvMat(cv::Mat img)
+	{
+		m_vMat.push_back(img.clone());
+		// Increment image counter
+		m_currentImageCnt++;
+
+		if (m_currentImageCnt >= getNumOfImage())
+		{
+			// emit signal;
+			std::unique_lock<std::mutex> lk(m_mu_imageCache);
+			m_is_condition_ready = true;
+			m_con_v_imageCache.notify_one();
+		}
+	}
+	
+	int getImages(std::vector<cv::Mat> &mats)
+	{
+		int status = 0;
+		std::unique_lock<std::mutex> lk(m_mu_imageCache);
+
+		bool bStatus = m_con_v_imageCache.wait_for(lk, std::chrono::seconds(3), m_is_condition_ready );
+		if (bStatus == false)
+		{
+			std::cerr << "get Images timeout!\n";
+			status = -1;
+		}
+
+		for (int i = 0; i < m_vMat.size(); ++i)
+		{
+			mats.push_back(m_vMat.at(i).clone());
+		}
+		m_currentImageCnt = 0;
+		m_vMat.clear();
+
+		return status;
+	}
+
+private:
+
+	bool m_is_condition_ready = false;
+	std::mutex m_mu_imageCache;
+	std::condition_variable m_con_v_imageCache;
+
+	std::mutex m_mu_grab;
+	std::mutex m_mu_imageCacheNumOfImage;
+
+	unsigned int m_NumImages= 7;
+	unsigned int m_currentImageCnt = 0;
+	std::vector<cv::Mat> m_vMat;
+};
 
 
 class ImageEventHandler : public  Pylon::CImageEventHandler
@@ -33,9 +108,9 @@ public:
 
 	~ImageEventHandler() {}
 
-	int setRecv(imageRecvInterface *pRecv)
+	int setCache(ImageCache *pCache)
 	{
-		m_pRecv = pRecv;
+		m_pCache = pCache;
 		return 0;
 	}
 
@@ -78,7 +153,10 @@ public:
 							outMat = cv::Mat();
 						}
 					}
-					m_pRecv->recvMat(outMat);
+					if (m_pCache)
+					{
+						m_pCache->recvMat(outMat);
+					}
 				}
 				else
 				{
@@ -86,7 +164,10 @@ public:
 					m_ImageConverter.Convert(pylonImage, ptrGrabResult);
 					cv::Mat imageBW = cv::Mat(height, width, CV_8UC1, (uint8_t*)pylonImage.GetBuffer());
 					cv::Mat outMat = imageBW;
-					m_pRecv->recvMat(outMat);
+					if (m_pCache)
+					{
+						m_pCache->recvMat(outMat);
+					}
 				}
 				
 			}
@@ -105,12 +186,12 @@ public:
 	}
 private:
 	bool m_bIsColor = false;
-	imageRecvInterface* m_pRecv = NULL;
+	ImageCache* m_pCache = NULL;
 	Pylon::CImageFormatConverter m_ImageConverter;
 };
 
 
-class baslerCapture
+class baslerCapture : public baslerCaptureItf
 {
 
 public:
@@ -118,44 +199,42 @@ public:
 	~baslerCapture();
 
 	int configurateExposure(float exposureTime); // microsec
-	int SetRecv(imageRecvInterface *pRecv);
-	int AcquireImages();
-	int StopAcquireImages();
 
-	int SetToFreerunMode();
-	int SetToTriggerMode();
+	int Start();
+	int Stop();
 
-	int SetToHardwareTrigger();
-	int SetToSoftwareTrigger();
-	int ExecuteSoftTrig();
+	int readyHWTrig(int numOfImagesPerTrig);
+	int getHWTrigImgs(std::vector<cv::Mat> &imgs);
+	int ExecuteSWTrig(cv::Mat& img);
+
+	int getCurrentState();
 
 private:
+	
 	int initBaslerCameras();
 	int terminateBaslerCameras();
 	bool IsUseDevPresent();
-	
+
 	int OpenDevice();
 	int CloseDevice();
 
-	int SetRecvToImageEventHandler(ImageEventHandler* p_imageEventHandler, imageRecvInterface *pRecv);
+	int setCurrentState(int state);
 private:
 	// Camera Devices
 	int m_nTotalDeviceNum = 0;
 	Pylon::DeviceInfoList_t m_listDeviceInfo;
 	std::vector<std::string> m_vCamSN;
 	
-
 	// local 
 	int m_UseDevIdx = 0;
 	Pylon::CInstantCamera m_InstantCamera;
 	ImageEventHandler* m_pimageEventHandler = NULL;
+	ImageCache m_Cache;
+	bool m_IsHWtriggerRunning = false;
+	int m_currentState = STOP_STATE;
 
-	bool m_trigger_on = false;
-
-	static const int HARDWARE_TRIGGER = 0;
-	static const int SOFTWARE_TRIGGER = 1;
-	int m_triggerSource = HARDWARE_TRIGGER; // 0: hardware 1: software
 };
+
 baslerCapture::baslerCapture()
 {
 	try
@@ -280,7 +359,9 @@ int baslerCapture::OpenDevice()
 		std::cout << "camModelName = " << camModelName << "\n";
 
 		// default trigger mode since it does not waste resources
-		SetToTriggerMode();
+		// Set trigger and expose
+		CEnumerationPtr triggerMode(m_InstantCamera.GetNodeMap().GetNode("TriggerMode"));
+		triggerMode->FromString("On");
 
 		// Set color
 		bool bIsColor = false;
@@ -296,16 +377,18 @@ int baslerCapture::OpenDevice()
 			bIsColor = true;
 		}
 
-		// Set hardware trigger as default
+		// Set software trigger as default. SHould not use func to avoid the state check
+		m_Cache.setNumOfImage(1);
 		CEnumerationPtr triggerMode(m_InstantCamera.GetNodeMap().GetNode("TriggerSource"));
-		triggerMode->FromString("Line1");
-		m_triggerSource = HARDWARE_TRIGGER;
-
+		triggerMode->FromString("Software");
+		
 		// set ImageEventHandler for color/bw camera
 		m_pimageEventHandler = new ImageEventHandler(bIsColor);
 		if (m_pimageEventHandler != NULL)
 		{
+			
 			m_InstantCamera.RegisterImageEventHandler(m_pimageEventHandler, RegistrationMode_Append, Cleanup_None);
+			m_pimageEventHandler->setCache(&m_Cache);
 		}
 		else
 		{
@@ -353,37 +436,8 @@ int baslerCapture::CloseDevice()
 	return 0;
 }
 
-int baslerCapture::SetRecvToImageEventHandler(ImageEventHandler* p_imageEventHandler, imageRecvInterface *pRecv)
-{
-	if (p_imageEventHandler == NULL)
-	{
-		std::cout << "ERROR m_pimageEventHandler = NULL" << "\n";
-		return -1;
-	}
 
-	p_imageEventHandler->setRecv(pRecv);
-	return 0;
-}
-
-
-int baslerCapture::SetRecv(imageRecvInterface *pRecv)
-{
-	if (pRecv == NULL)
-	{
-		std::cout << "ERROR pRecv = NULL" << "\n";
-		return -1;
-	}
-	
-	if (!IsUseDevPresent())
-	{
-		std::cout << "camera not present" << "\n";
-		return -1;
-	}
-
-	return SetRecvToImageEventHandler(m_pimageEventHandler, pRecv);
-}
-
-int baslerCapture::AcquireImages()
+int baslerCapture::Start()
 {
 	if (IsUseDevPresent())
 	{
@@ -393,6 +447,7 @@ int baslerCapture::AcquireImages()
 			{
 				std::cout << "m_InstantCamera start capture ..." << "\n";
 				m_InstantCamera.StartGrabbing(GrabStrategy_OneByOne, GrabLoop_ProvidedByInstantCamera);
+				setCurrentState(START_STATE);
 				return 0;
 			}
 			else
@@ -403,17 +458,17 @@ int baslerCapture::AcquireImages()
 		}
 		else
 		{
-			std::cout << "Camera is not open." << "\n";
+			std::cerr << "Camera is not open." << "\n";
 		}
 	}
 	else
 	{
-		std::cout << "Camera Device Not Present." << "\n";
+		std::cerr << "Camera Device Not Present." << "\n";
 	}
 	return -1;
 }
 
-int baslerCapture::StopAcquireImages()
+int baslerCapture::Stop()
 {
 	if (IsUseDevPresent())
 	{
@@ -422,78 +477,129 @@ int baslerCapture::StopAcquireImages()
 			if (m_InstantCamera.IsGrabbing())
 			{
 				m_InstantCamera.StopGrabbing();
+				setCurrentState(STOP_STATE);
 				return 0;
 			}
 		}
 	}
 	else
 	{
-		std::cout << "Camera Device Not Present." << "\n";
+		std::cerr << "Camera Device Not Present." << "\n";
 	}
 	return -1;
 }
 
-
-int baslerCapture::SetToFreerunMode()
+int baslerCapture::readyHWTrig(int numOfImagesPerTrig)
 {
-	if (m_trigger_on == true)
+	std::lock_guard<std::mutex> lk(g_mu_Grab);
+
+	//--- set number of image to cache---
+	m_Cache.setNumOfImage(numOfImagesPerTrig);
+
+	//--- set hw trigger mode ----
+	CEnumerationPtr triggerMode(m_InstantCamera.GetNodeMap().GetNode("TriggerSource"));
+	triggerMode->FromString("Line1");
+	m_IsHWtriggerRunning = true;
+}
+
+int baslerCapture::getHWTrigImgs(std::vector<cv::Mat> &imgs)
+{
+	std::lock_guard<std::mutex> lk(g_mu_Grab);
+	int status = 0;
+	
+	if (!m_IsHWtriggerRunning)
 	{
-		// Set trigger and expose
-		CEnumerationPtr triggerMode(m_InstantCamera.GetNodeMap().GetNode("TriggerMode"));
-		triggerMode->FromString("Off");
-		m_trigger_on = false;
+		std::cerr << "Not hardwareTrigger Ready.Please ReadyHWTrig before calling this function.\n";
+		return -1;
 	}
+
+	//--- get images ----
+	std::vector<cv::Mat> imgs;
+	status = m_Cache.getImages(imgs);
+	if (status != 0)
+	{
+		std::cerr << "get images fail.\n";
+		return -1;
+	}
+
+	if (imgs.size() == 0)
+	{
+		std::cerr << "image invalid.\n";
+		return -1;
+	}
+
+	if (imgs[0].empty())
+	{
+		std::cerr << "image invalid.\n";
+		return -1;
+	}
+
+	imgs = imgs[0];
 	return 0;
 }
 
-int baslerCapture::SetToTriggerMode()
+int baslerCapture::ExecuteSWTrig(cv::Mat& img)
 {
-	if (m_trigger_on == false)
+	std::lock_guard<std::mutex> lk(g_mu_Grab);
+	int status = 0;
+	if (m_IsHWtriggerRunning)
 	{
-		// Set trigger and expose
-		CEnumerationPtr triggerMode(m_InstantCamera.GetNodeMap().GetNode("TriggerMode"));
-		triggerMode->FromString("On");
-		m_trigger_on = true;
+		return 0;
 	}
-	return 0;
-}
 
+	//--- set number of image to cache---
+	m_Cache.setNumOfImage(1);
 
-int baslerCapture::SetToHardwareTrigger()
-{
-	if (m_triggerSource == SOFTWARE_TRIGGER)
-	{
-		// Set trigger and expose
-		CEnumerationPtr triggerMode(m_InstantCamera.GetNodeMap().GetNode("TriggerSource"));
-		triggerMode->FromString("Line1");
-		m_triggerSource = HARDWARE_TRIGGER;
-	}
-	return 0;
-}
+	// ---set softwaretrigger mode ---
+	CEnumerationPtr triggerMode(m_InstantCamera.GetNodeMap().GetNode("TriggerSource"));
+	triggerMode->FromString("Software");
 
-int baslerCapture::SetToSoftwareTrigger()
-{
-	if (m_triggerSource == HARDWARE_TRIGGER)
-	{
-		// Set trigger and expose
-		CEnumerationPtr triggerMode(m_InstantCamera.GetNodeMap().GetNode("TriggerSource"));
-		triggerMode->FromString("Software");
-		m_triggerSource = SOFTWARE_TRIGGER;
-	}
-	return 0;
-}
-
-
-int baslerCapture::ExecuteSoftTrig()
-{
-
+	// --- trigger execute
 	CEnumerationPtr triggerSelector(m_InstantCamera.GetNodeMap().GetNode("TriggerSelector"));
 	CCommandPtr SoftExecute(m_InstantCamera.GetNodeMap().GetNode("TriggerSoftware"));
 	if (IsWritable(SoftExecute))
 	{
 		SoftExecute->Execute();
 	}
+
+	std::vector<cv::Mat> imgs;
+	status = m_Cache.getImages(imgs);
+	if (status != 0)
+	{
+		std::cerr << "get images fail.\n";
+		return -1;
+	}
+
+	if (imgs.size() == 0)
+	{
+		std::cerr << "image invalid.\n";
+		return -1;
+	}
+
+	if (imgs[0].empty())
+	{
+		std::cerr << "image invalid.\n";
+		return -1;
+	}
+	 
+	img = imgs[0];
 	return 0;
 }
 
+int baslerCapture::setCurrentState(int state)
+{
+	std::lock_guard<std::mutex> lk(g_mu_state);
+	m_currentState = state;
+	return 0;
+}
+int baslerCapture::getCurrentState()
+{
+	std::lock_guard<std::mutex> lk(g_mu_state);
+	return m_currentState;
+}
 
+
+std::shared_ptr<baslerCaptureItf> createBaslerCapture()
+{
+	return std::make_shared<baslerCaptureItf>();
+}

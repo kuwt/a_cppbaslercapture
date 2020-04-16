@@ -8,26 +8,26 @@
 #pragma once
 #include <opencv2/opencv.hpp>
 
-class baslerHardwareTriggerImgRecvItf
-{
-public:
-	virtual ~baslerHardwareTriggerImgRecvItf() {}
-	virtual int recvMat(cv::Mat img) = 0;
-};
+
 
 class baslerCaptureItf
 {
 public:
 	virtual ~baslerCaptureItf() {}
 
-	int configurateExposure(float exposureTime); // microsec
-	int SetToHardwareTrigger();
-	int SetToSoftwareTrigger();
-	int SetHardwareTriggerImgRecv(baslerHardwareTriggerImgRecvItf *pRecv);
+	virtual int configurateExposure(float exposureTime) = 0; // microsec
 
-	int StartAcquireImages();
-	int StopAcquireImages();
-	int ExecuteSoftTrig(cv::Mat& img);
+	virtual int Start() = 0;
+	virtual int Stop() = 0;
+
+	virtual int readyHWTrig() = 0;
+	virtual int getHWTrigImg() = 0;
+
+	virtual int ExecuteSWTrig(cv::Mat& img) = 0;
+
+	static const int START_STATE = 1;
+	static const int STOP_STATE = 0;
+	virtual int getCurrentState() = 0;
 };
 
-baslerCaptureItf* createBaslerCapture();
+std::shared_ptr<baslerCaptureItf> createBaslerCapture();
