@@ -11,7 +11,7 @@ int liveStreamThread(std::shared_ptr<baslerCaptureItf> pCapture)
 	while (pCapture->getCurrentState() == baslerCaptureItf::START_STATE)
 	{
 		cv::Mat mat;
-		int status = pCapture->captureStreaming(mat);
+		int status = pCapture->ExecuteSWTrig(mat);
 		if (status == 0 && !mat.empty())
 		{
 			cv::imshow("livevideo", mat);
@@ -27,7 +27,6 @@ int liveStreamThread(std::shared_ptr<baslerCaptureItf> pCapture)
 int main(int argc, char *argv[])
 {
 	float exposureTime;
-	int numberOfImages;
 	std::string imageSavePath;
 	// handling para
 	if (argc < 2)
@@ -37,9 +36,6 @@ int main(int argc, char *argv[])
 		exposureTime = 15550;
 		std::cout << "exposureTime = " << exposureTime << "\n";
 
-		numberOfImages = 27;
-		std::cout << "numberOfImages = " << numberOfImages << "\n";
-
 		imageSavePath = ".";
 		std::cout << "imageSavePath = " << imageSavePath << "\n";
 	}
@@ -47,26 +43,18 @@ int main(int argc, char *argv[])
 	{
 		exposureTime = std::atof(std::string(argv[1]).c_str());
 		std::cout << "exposureTime = " << exposureTime << "\n";
-		numberOfImages = std::atof(std::string(argv[2]).c_str());
-		std::cout << "numberOfImages = " << numberOfImages << "\n";
 		imageSavePath = std::string(argv[3]).c_str();
 		std::cout << "imageSavePath = " << imageSavePath << "\n";
 
 	}
 
-	std::shared_ptr<projectorCameraCaptureInterface> pCapture = createProjectorCameraCapture();
+	std::shared_ptr<baslerCaptureItf> pCapture = createBaslerCapture();
 
-	int status = pCapture->init("COM1");
-	if (status != 0)
-	{
-		std::cout << "projectorCameraCaptureInterface init error\n";
-		getchar();
-		return -1;
-	}
-	pCapture->configurateNumOfSeriesImage(numberOfImages);
-	//pCapture->configurateExposure(exposureTime);
-	pCapture->start();
+	pCapture->configurateExposure(exposureTime);
+	pCapture->Start();
 
+	int status = 0;
+	int counter = 0;
 	std::thread t(liveStreamThread, pCapture);
 	while (1)
 	{
@@ -77,8 +65,8 @@ int main(int argc, char *argv[])
 
 		if (action == "k")
 		{
-			std::vector<cv::Mat> mats;
-			status = pCapture->captureProSeries(mats);
+			cv::Mat mat;
+			status = pCapture->ExecuteSWTrig(mat);
 			if (status != 0)
 			{
 				std::cout << "capture fail\n";
@@ -86,14 +74,11 @@ int main(int argc, char *argv[])
 			else
 			{
 				std::cout << "capture successful\n";
-				for (int i = 0; i < mats.size(); ++i)
-				{
-					std::cout << "save images " << i << "\n";
-
-					char buf[1024];
-					snprintf(buf, 1024, "%s/%04d.bmp", imageSavePath, i);
-					cv::imwrite(buf, mats.at(i));
-				}
+				char buf[1024];
+				snprintf(buf, 1024, "%s/cam_%d_%d.bmp", imageSavePath.c_str(), 0, counter);
+				cv::imwrite(buf, mat);
+				counter++;
+				
 			}
 		}
 		else if (action == "q")
@@ -106,7 +91,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	pCapture->stop();
+	pCapture->Stop();
 	t.join();
 	return 0;
 }

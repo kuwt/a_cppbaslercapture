@@ -58,7 +58,7 @@ public:
 		int status = 0;
 		std::unique_lock<std::mutex> lk(m_mu_imageCache);
 
-		bool bStatus = m_con_v_imageCache.wait_for(lk, std::chrono::seconds(3), m_is_condition_ready );
+		bool bStatus = m_con_v_imageCache.wait_for(lk, std::chrono::seconds(10), [&]() {return m_is_condition_ready; });
 		if (bStatus == false)
 		{
 			std::cerr << "get Images timeout!\n";
@@ -71,7 +71,7 @@ public:
 		}
 		m_currentImageCnt = 0;
 		m_vMat.clear();
-
+		m_is_condition_ready = false;
 		return status;
 	}
 
@@ -84,7 +84,7 @@ private:
 	std::mutex m_mu_grab;
 	std::mutex m_mu_imageCacheNumOfImage;
 
-	unsigned int m_NumImages= 7;
+	unsigned int m_NumImages= 1;
 	unsigned int m_currentImageCnt = 0;
 	std::vector<cv::Mat> m_vMat;
 };
@@ -193,31 +193,22 @@ private:
 
 class baslerCapture : public baslerCaptureItf
 {
-
 public:
 	baslerCapture();
-	~baslerCapture();
-
+	virtual ~baslerCapture();
 	int configurateExposure(float exposureTime); // microsec
-
 	int Start();
 	int Stop();
-
 	int readyHWTrig(int numOfImagesPerTrig);
 	int getHWTrigImgs(std::vector<cv::Mat> &imgs);
 	int ExecuteSWTrig(cv::Mat& img);
-
 	int getCurrentState();
-
 private:
-	
 	int initBaslerCameras();
 	int terminateBaslerCameras();
 	bool IsUseDevPresent();
-
 	int OpenDevice();
 	int CloseDevice();
-
 	int setCurrentState(int state);
 private:
 	// Camera Devices
@@ -379,8 +370,8 @@ int baslerCapture::OpenDevice()
 
 		// Set software trigger as default. SHould not use func to avoid the state check
 		m_Cache.setNumOfImage(1);
-		CEnumerationPtr triggerMode(m_InstantCamera.GetNodeMap().GetNode("TriggerSource"));
-		triggerMode->FromString("Software");
+		CEnumerationPtr triggerSource(m_InstantCamera.GetNodeMap().GetNode("TriggerSource"));
+		triggerSource->FromString("Software");
 		
 		// set ImageEventHandler for color/bw camera
 		m_pimageEventHandler = new ImageEventHandler(bIsColor);
@@ -500,6 +491,8 @@ int baslerCapture::readyHWTrig(int numOfImagesPerTrig)
 	CEnumerationPtr triggerMode(m_InstantCamera.GetNodeMap().GetNode("TriggerSource"));
 	triggerMode->FromString("Line1");
 	m_IsHWtriggerRunning = true;
+
+	return 0;
 }
 
 int baslerCapture::getHWTrigImgs(std::vector<cv::Mat> &imgs)
@@ -514,27 +507,27 @@ int baslerCapture::getHWTrigImgs(std::vector<cv::Mat> &imgs)
 	}
 
 	//--- get images ----
-	std::vector<cv::Mat> imgs;
-	status = m_Cache.getImages(imgs);
+	std::vector<cv::Mat> _imgs;
+	status = m_Cache.getImages(_imgs);
 	if (status != 0)
 	{
 		std::cerr << "get images fail.\n";
 		return -1;
 	}
 
-	if (imgs.size() == 0)
+	if (_imgs.size() == 0)
 	{
 		std::cerr << "image invalid.\n";
 		return -1;
 	}
 
-	if (imgs[0].empty())
+	if (_imgs[0].empty())
 	{
 		std::cerr << "image invalid.\n";
 		return -1;
 	}
 
-	imgs = imgs[0];
+	imgs = _imgs;
 	return 0;
 }
 
@@ -544,7 +537,7 @@ int baslerCapture::ExecuteSWTrig(cv::Mat& img)
 	int status = 0;
 	if (m_IsHWtriggerRunning)
 	{
-		return 0;
+		return 1;
 	}
 
 	//--- set number of image to cache---
@@ -601,5 +594,5 @@ int baslerCapture::getCurrentState()
 
 std::shared_ptr<baslerCaptureItf> createBaslerCapture()
 {
-	return std::make_shared<baslerCaptureItf>();
+	return std::make_shared<baslerCapture>();
 }

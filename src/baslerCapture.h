@@ -7,7 +7,7 @@
 
 #pragma once
 #include <opencv2/opencv.hpp>
-
+#include <memory>
 
 
 class baslerCaptureItf
@@ -20,9 +20,8 @@ public:
 	virtual int Start() = 0;
 	virtual int Stop() = 0;
 
-	virtual int readyHWTrig() = 0;
-	virtual int getHWTrigImg() = 0;
-
+	virtual int readyHWTrig(int numOfImagesPerTrig) = 0;
+	virtual int getHWTrigImgs(std::vector<cv::Mat> &imgs) = 0;
 	virtual int ExecuteSWTrig(cv::Mat& img) = 0;
 
 	static const int START_STATE = 1;
