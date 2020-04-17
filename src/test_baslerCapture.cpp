@@ -132,8 +132,8 @@ int main(int argc, char *argv[])
 					char buf[1024];
 					snprintf(buf, 1024, "%s/cam_%d_%d.bmp", imageSavePath.c_str(), i, counter);
 					cv::imwrite(buf, mats[i]);
-					counter++;
 				}
+				counter++;
 			}
 		}
 		else if (action == "q")
