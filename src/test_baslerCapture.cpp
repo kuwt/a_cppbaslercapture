@@ -34,19 +34,25 @@ int liveStreamThread(std::shared_ptr<baslerCaptureItf> pCapture)
 			continue;
 		}
 
-		/***** concat *****/
-		cv::Mat mat_hconcat = mats[0];
-		for (int i = 1; i < mats.size(); ++i)
-		{
-			cv::hconcat(mat_hconcat, mats[i], mat_hconcat);
-		}
-			
+		std::vector<cv::Mat> resize_mats;
 		/***** resize *****/
 		int targetHeight = 500;
-		float scaleFactor = float(targetHeight) / float(mat_hconcat.size().height);
-		int targetWidth = int(mat_hconcat.size().width * scaleFactor);
-		cv::Mat mat_hconcat_resize;
-		cv::resize(mat_hconcat, mat_hconcat_resize, cv::Size(targetWidth, targetHeight));
+		for (int i = 0; i < mats.size(); ++i)
+		{
+			cv::Mat resizeMat;
+			float scaleFactor = float(targetHeight) / float(mats[i].size().height);
+			int targetWidth = int(mats[i].size().width * scaleFactor);
+			cv::Mat mat_hconcat_resize;
+			cv::resize(mats[i], resizeMat, cv::Size(targetWidth, targetHeight));
+			resize_mats.push_back(resizeMat);
+		}
+
+		/***** concat *****/
+		cv::Mat mat_hconcat = resize_mats[0];
+		for (int i = 1; i < resize_mats.size(); ++i)
+		{
+			cv::hconcat(mat_hconcat, resize_mats[i], mat_hconcat);
+		}
 
 		/***** fps *****/
 		auto endtime = std::chrono::steady_clock::now();
@@ -55,19 +61,17 @@ int liveStreamThread(std::shared_ptr<baslerCaptureItf> pCapture)
 
 		char buffer[1024];
 		snprintf(buffer, 1024, "fps = %f Hz", fps);
-		cv::putText(mat_hconcat_resize, buffer,
+		cv::putText(mat_hconcat, buffer,
 			cvPoint(30, 30), cv::FONT_HERSHEY_COMPLEX_SMALL,
 			0.8, cvScalar(200, 200, 250), 1, CV_AA);
 
 		/***** show *****/
-		cv::imshow("livevideo", mat_hconcat_resize);
+		cv::imshow("livevideo", mat_hconcat);
 		cv::waitKey(1);
 
 	}
 	return 0;
 }
-
-
 
 int main(int argc, char *argv[])
 {
@@ -97,8 +101,8 @@ int main(int argc, char *argv[])
 	
 	std::vector<std::string> v_sn;
 	v_sn.push_back("22080226");
-	pCapture->openDevices(v_sn);
-	//pCapture->openDevices(pCapture->getAvailableSNs());
+	//pCapture->openDevices(v_sn);
+	pCapture->openDevices(pCapture->getAvailableSNs());
 	
 	pCapture->configurateExposure(exposureTime);
 	pCapture->start();
