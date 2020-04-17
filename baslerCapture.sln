@@ -5,6 +5,8 @@ VisualStudioVersion = 14.0.25420.1
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "vs_baslerCapture", "vs_baslerCapture\vs_baslerCapture.vcxproj", "{A30EB383-E5A8-4FD8-9EDC-A6DB01A511BB}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "vs_baslerCaptureServer", "vs_baslerCaptureServer\vs_baslerCaptureServer.vcxproj", "{258156CE-F8A7-4626-A4F8-7DD3871D4A4E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -21,6 +23,14 @@ Global
 		{A30EB383-E5A8-4FD8-9EDC-A6DB01A511BB}.Release|x64.Build.0 = Release|x64
 		{A30EB383-E5A8-4FD8-9EDC-A6DB01A511BB}.Release|x86.ActiveCfg = Release|Win32
 		{A30EB383-E5A8-4FD8-9EDC-A6DB01A511BB}.Release|x86.Build.0 = Release|Win32
+		{258156CE-F8A7-4626-A4F8-7DD3871D4A4E}.Debug|x64.ActiveCfg = Debug|x64
+		{258156CE-F8A7-4626-A4F8-7DD3871D4A4E}.Debug|x64.Build.0 = Debug|x64
+		{258156CE-F8A7-4626-A4F8-7DD3871D4A4E}.Debug|x86.ActiveCfg = Debug|Win32
+		{258156CE-F8A7-4626-A4F8-7DD3871D4A4E}.Debug|x86.Build.0 = Debug|Win32
+		{258156CE-F8A7-4626-A4F8-7DD3871D4A4E}.Release|x64.ActiveCfg = Release|x64
+		{258156CE-F8A7-4626-A4F8-7DD3871D4A4E}.Release|x64.Build.0 = Release|x64
+		{258156CE-F8A7-4626-A4F8-7DD3871D4A4E}.Release|x86.ActiveCfg = Release|Win32
+		{258156CE-F8A7-4626-A4F8-7DD3871D4A4E}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

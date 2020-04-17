@@ -1,0 +1,1 @@
+vs_baslerCapture.exe  0 ./img 15550

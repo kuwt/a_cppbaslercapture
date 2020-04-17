@@ -659,11 +659,6 @@ int baslerCapture::addDevice(const std::string &camSN)
 		}
 	}
 	
-	std::cout << "num of working cameras = " << m_vpWorkingCameras.size() << "\n";
-	for (int i = 0; i < m_vpWorkingCameras.size(); ++i)
-	{
-		std::cout << "working camera serial = " << m_vpWorkingCameras[i]->getSerial() << "\n";
-	}
 	return 0;
 }
 

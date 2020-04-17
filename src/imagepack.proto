@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+message imagepack {
+    message Mat {
+        uint32 width = 1;
+        uint32 height = 2;
+        bytes image_data = 3;
+    }
+    
+    repeated Mat imgs = 1;
+    repeated uint32 x = 2;
+}

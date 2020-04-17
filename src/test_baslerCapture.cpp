@@ -75,12 +75,16 @@ int liveStreamThread(std::shared_ptr<baslerCaptureItf> pCapture)
 
 int main(int argc, char *argv[])
 {
+	int startImgIdx = 0;
 	float exposureTime;
 	std::string imageSavePath;
 	// handling para
 	if (argc < 2)
 	{
 		// default para
+		startImgIdx = 0;
+		std::cout << "startImgIdx = " << startImgIdx << "\n";
+
 		std::cout << "using default exposurePara\n";
 		exposureTime = 15550;
 		std::cout << "exposureTime = " << exposureTime << "\n";
@@ -90,22 +94,28 @@ int main(int argc, char *argv[])
 	}
 	else
 	{
-		exposureTime = std::atof(std::string(argv[1]).c_str());
-		std::cout << "exposureTime = " << exposureTime << "\n";
-		imageSavePath = std::string(argv[3]).c_str();
+		startImgIdx = std::atof(std::string(argv[1]).c_str());
+		std::cout << "startImgIdx = " << startImgIdx << "\n";
+
+		imageSavePath = std::string(argv[2]).c_str();
 		std::cout << "imageSavePath = " << imageSavePath << "\n";
 
+		exposureTime = std::atof(std::string(argv[3]).c_str());
+		std::cout << "exposureTime = " << exposureTime << "\n";
 	}
 
+	/****** start camera **********/
 	std::shared_ptr<baslerCaptureItf> pCapture = createBaslerCapture();
 	
-	std::vector<std::string> v_sn;
-	v_sn.push_back("22080226");
+	//std::vector<std::string> v_sn;
+	//v_sn.push_back("22080226");
 	//pCapture->openDevices(v_sn);
 	pCapture->openDevices(pCapture->getAvailableSNs());
 	
 	pCapture->configurateExposure(exposureTime);
 	pCapture->start();
+
+	/************ service loop ***************/
 	int status = 0;
 	int counter = 0;
 	std::thread t(liveStreamThread, pCapture);
