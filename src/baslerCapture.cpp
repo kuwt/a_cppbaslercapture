@@ -22,6 +22,11 @@ static bool	g_bPylonAutoInitTerm = false;
 static std::mutex g_mu_Grab;
 static std::mutex g_mu_state;
 
+/****************************************
+
+ImageCache
+
+*****************************************/
 class ImageCache
 {
 public:
@@ -89,11 +94,18 @@ private:
 	std::vector<cv::Mat> m_vMat;
 };
 
+/****************************************
 
+ImageEventHandler
+
+*****************************************/
 class ImageEventHandler : public  Pylon::CImageEventHandler
 {
 public:
-	ImageEventHandler(bool bIsColor)
+	ImageEventHandler(){}
+	~ImageEventHandler() {}
+
+	int setColor(bool bIsColor)
 	{
 		m_bIsColor = bIsColor;
 		if (m_bIsColor)
@@ -104,9 +116,8 @@ public:
 		{
 			m_ImageConverter.OutputPixelFormat = Pylon::PixelType_Mono8;
 		}
+		return 0;
 	}
-
-	~ImageEventHandler() {}
 
 	int setCache(ImageCache *pCache)
 	{
@@ -190,213 +201,121 @@ private:
 	Pylon::CImageFormatConverter m_ImageConverter;
 };
 
+/****************************************
 
-class baslerCapture : public baslerCaptureItf
+baslerCam
+
+*****************************************/
+class baslerCam
 {
 public:
-	baslerCapture();
-	virtual ~baslerCapture();
+	baslerCam() {};
+	~baslerCam();
+	int init(CDeviceInfo info);
+	std::string getSerial();
 	int configurateExposure(float exposureTime); // microsec
-	int Start();
-	int Stop();
-	int readyHWTrig(int numOfImagesPerTrig);
+	int start();
+	int stop();
+	int readyHWTrig(int numOfTrig);
 	int getHWTrigImgs(std::vector<cv::Mat> &imgs);
 	int ExecuteSWTrig(cv::Mat& img);
-	int getCurrentState();
 private:
-	int initBaslerCameras();
-	int terminateBaslerCameras();
-	bool IsUseDevPresent();
-	int OpenDevice();
+	int OpenDevice(CDeviceInfo info);
 	int CloseDevice();
-	int setCurrentState(int state);
 private:
-	// Camera Devices
-	int m_nTotalDeviceNum = 0;
-	Pylon::DeviceInfoList_t m_listDeviceInfo;
-	std::vector<std::string> m_vCamSN;
-	
-	// local 
+
 	int m_UseDevIdx = 0;
+	std::string m_CamSN;
 	Pylon::CInstantCamera m_InstantCamera;
-	ImageEventHandler* m_pimageEventHandler = NULL;
+	ImageEventHandler m_imageEventHandler;
 	ImageCache m_Cache;
 	bool m_IsHWtriggerRunning = false;
-	int m_currentState = STOP_STATE;
-
 };
 
-baslerCapture::baslerCapture()
+int baslerCam::init(CDeviceInfo info)
 {
+	int status = 0;
 	try
 	{
-		initBaslerCameras();
+		status = OpenDevice(info);
+		if (status != 0)
+		{
+			std::cerr << "init fail.\n";
+			return -1;
+		}
 	}
 	catch (GenICam::GenericException &e)
 	{
-		char buff[1024];
-		snprintf(buff, sizeof(buff), "Catch Exception InitAll() error: %s", e.GetDescription());
-		std::string str;
-		str = buff;
-		std::cout << str << "\n";
-	}
-
-	try
-	{
-		OpenDevice();
-	}
-	catch (GenICam::GenericException &e)
-	{
-		char buff[1024];
-		snprintf(buff, sizeof(buff), "Catch Exception OpenDevice: %s", e.GetDescription());
-		std::string str;
-		str = buff;
-		std::cout << str << "\n";
-	}
-}
-
-
-baslerCapture::~baslerCapture()
-{
-	CloseDevice();
-	terminateBaslerCameras();
-}
-
-int baslerCapture::initBaslerCameras()
-{
-	std::cout << "initBaslerCameras" << "\n";
-	if (g_bPylonAutoInitTerm == false)
-	{
-		Pylon::PylonInitialize();
-		g_bPylonAutoInitTerm = true;
-	}
-
-	Pylon::CTlFactory& tlFactory = CTlFactory::GetInstance();
-
-	//Get Device total view
-	DeviceInfoList_t listDeviceInfo;
-	int nTotalCamNum = tlFactory.EnumerateDevices(listDeviceInfo);
-	std::cout << "nTotalCamNum = " << nTotalCamNum << "\n";
-	m_nTotalDeviceNum = nTotalCamNum;
-	m_listDeviceInfo = listDeviceInfo;
-
-	//Get SN from device list
-	for (int i = 0; i < nTotalCamNum; i++)
-	{
-		DeviceInfoList_t::iterator it = listDeviceInfo.begin() + i;
-		std::string strDeviceSN = (*it).GetSerialNumber().c_str();
-		m_vCamSN.push_back(strDeviceSN);
-		std::cout << "strDeviceSN " << std::to_string(i) << " = " << strDeviceSN << "\n";
-	}
-
-	return 0;
-}
-
-int baslerCapture::terminateBaslerCameras()
-{
-	if (g_bPylonAutoInitTerm == true)
-	{
-		Pylon::PylonTerminate();
-		g_bPylonAutoInitTerm = false;
-	}
-
-	return 0;
-}
-
-bool baslerCapture::IsUseDevPresent()
-{
-	if (m_UseDevIdx >= 0 && m_UseDevIdx < m_nTotalDeviceNum)
-	{
-		return true;
-	}
-	else
-	{
-		return false;
-	}
-}
-
-int baslerCapture::OpenDevice()
-{
-	if (IsUseDevPresent())
-	{
-		//  prepare m_InstantCamera
-		if (m_InstantCamera.IsPylonDeviceAttached())
-		{
-			m_InstantCamera.DetachDevice();
-			m_InstantCamera.DestroyDevice();
-		}
-
-		// locate camera index
-		int camIdx = -1;
-		for (int i = 0; i < m_listDeviceInfo.size(); ++i)
-		{
-			if (m_listDeviceInfo[i].GetModelName() == cameraModelName)
-			{
-				camIdx = i;
-			}
-		}
-		if (camIdx == -1)
-		{
-			std::cout << "setup camera fail. Camera Installed Model Incorrect." << "\n";
-			std::cout << " Close the program and restart.\n";
-			return -1;
-		}
-
-		m_UseDevIdx = camIdx;
-		m_InstantCamera.Attach(CTlFactory::GetInstance().CreateDevice(m_listDeviceInfo[m_UseDevIdx]));
-		m_InstantCamera.Open();
-
-		std::string camModelName = CStringPtr(m_InstantCamera.GetNodeMap().GetNode("DeviceModelName"))->GetValue();
-		std::cout << "camModelName = " << camModelName << "\n";
-
-		// default trigger mode since it does not waste resources
-		// Set trigger and expose
-		CEnumerationPtr triggerMode(m_InstantCamera.GetNodeMap().GetNode("TriggerMode"));
-		triggerMode->FromString("On");
-
-		// Set color
-		bool bIsColor = false;
-		const char * pchar = camModelName.c_str();
-		if ('m' == pchar[camModelName.size() - 1])
-		{
-			std::cout << "it is mono camera" << "\n";
-			bIsColor = false;
-		}
-		else if ('c' == pchar[camModelName.size() - 1])
-		{
-			std::cout << "it is RGB camera = " << "\n";
-			bIsColor = true;
-		}
-
-		// Set software trigger as default. SHould not use func to avoid the state check
-		m_Cache.setNumOfImage(1);
-		CEnumerationPtr triggerSource(m_InstantCamera.GetNodeMap().GetNode("TriggerSource"));
-		triggerSource->FromString("Software");
-		
-		// set ImageEventHandler for color/bw camera
-		m_pimageEventHandler = new ImageEventHandler(bIsColor);
-		if (m_pimageEventHandler != NULL)
-		{
-			
-			m_InstantCamera.RegisterImageEventHandler(m_pimageEventHandler, RegistrationMode_Append, Cleanup_None);
-			m_pimageEventHandler->setCache(&m_Cache);
-		}
-		else
-		{
-			std::cout << "m_pimageEventHandler NULL" << "\n";
-			return -1;
-		}
-		
-	}
-	else
-	{
-		std::cout << "Camera Device Not Present." << "\n";
+		std::cerr << "init fail. \n";
+		std::cerr << e.what();
 		return -1;
 	}
+
 	return 0;
 }
 
-int baslerCapture::configurateExposure(float time)
+std::string baslerCam::getSerial()
+{
+	return m_CamSN;
+}
+
+baslerCam::~baslerCam()
+{
+	CloseDevice();
+}
+
+int baslerCam::OpenDevice(CDeviceInfo info)
+{
+	//  prepare m_InstantCamera
+	if (m_InstantCamera.IsPylonDeviceAttached())
+	{
+		m_InstantCamera.DetachDevice();
+		m_InstantCamera.DestroyDevice();
+	}
+
+	m_InstantCamera.Attach(CTlFactory::GetInstance().CreateDevice(info));
+	m_InstantCamera.Open();
+
+	std::string camModelName = CStringPtr(m_InstantCamera.GetNodeMap().GetNode("DeviceModelName"))->GetValue();
+	std::cout << "camModelName = " << camModelName << "\n";
+
+	//  assign sn
+	m_CamSN = info.GetSerialNumber().c_str();
+
+	// default trigger mode since it does not waste resources
+	// Set trigger and expose
+	CEnumerationPtr triggerMode(m_InstantCamera.GetNodeMap().GetNode("TriggerMode"));
+	triggerMode->FromString("On");
+
+	// Set color
+	bool bIsColor = false;
+	const char * pchar = camModelName.c_str();
+	if ('m' == pchar[camModelName.size() - 1])
+	{
+		std::cout << "it is mono camera" << "\n";
+		bIsColor = false;
+	}
+	else if ('c' == pchar[camModelName.size() - 1])
+	{
+		std::cout << "it is RGB camera = " << "\n";
+		bIsColor = true;
+	}
+
+	// Set software trigger as default. SHould not use func to avoid the state check
+	m_Cache.setNumOfImage(1);
+	CEnumerationPtr triggerSource(m_InstantCamera.GetNodeMap().GetNode("TriggerSource"));
+	triggerSource->FromString("Software");
+
+	// set ImageEventHandler 
+	m_InstantCamera.RegisterImageEventHandler(&m_imageEventHandler, RegistrationMode_Append, Cleanup_None);
+	m_imageEventHandler.setCache(&m_Cache);
+	m_imageEventHandler.setColor(bIsColor);
+	
+
+	return 0;
+}
+
+int baslerCam::configurateExposure(float time)
 {
 	CFloatPtr exposureTime(m_InstantCamera.GetNodeMap().GetNode("ExposureTime"));
 	exposureTime->SetValue(time);
@@ -404,19 +323,15 @@ int baslerCapture::configurateExposure(float time)
 }
 
 
-int baslerCapture::CloseDevice()
+int baslerCam::CloseDevice()
 {
 	if (m_InstantCamera.IsOpen())
 	{
 		m_InstantCamera.Close();
 	}
 
-	if (m_pimageEventHandler)
-	{
-		m_InstantCamera.DeregisterImageEventHandler(m_pimageEventHandler);
-		delete m_pimageEventHandler;
-		m_pimageEventHandler = NULL;
-	}
+	m_InstantCamera.DeregisterImageEventHandler(&m_imageEventHandler);
+		
 
 	if (m_InstantCamera.IsPylonDeviceAttached())
 	{
@@ -427,65 +342,47 @@ int baslerCapture::CloseDevice()
 	return 0;
 }
 
-
-int baslerCapture::Start()
+int baslerCam::start()
 {
-	if (IsUseDevPresent())
+	if (m_InstantCamera.IsOpen())
 	{
-		if (m_InstantCamera.IsOpen())
+		if (!m_InstantCamera.IsGrabbing())
 		{
-			if (!m_InstantCamera.IsGrabbing())
-			{
-				std::cout << "m_InstantCamera start capture ..." << "\n";
-				m_InstantCamera.StartGrabbing(GrabStrategy_OneByOne, GrabLoop_ProvidedByInstantCamera);
-				setCurrentState(START_STATE);
-				return 0;
-			}
-			else
-			{
-				std::cout << "Camera is grabbing already." << "\n";
-			}
-			
+			std::cout << "m_InstantCamera start capture ..." << "\n";
+			m_InstantCamera.StartGrabbing(GrabStrategy_OneByOne, GrabLoop_ProvidedByInstantCamera);
+			return 0;
 		}
 		else
 		{
-			std::cerr << "Camera is not open." << "\n";
+			std::cout << "Camera is grabbing already." << "\n";
 		}
 	}
 	else
 	{
-		std::cerr << "Camera Device Not Present." << "\n";
+		std::cerr << "Camera is not open." << "\n";
 	}
 	return -1;
 }
 
-int baslerCapture::Stop()
+int baslerCam::stop()
 {
-	if (IsUseDevPresent())
+	if (m_InstantCamera.IsOpen())
 	{
-		if (m_InstantCamera.IsOpen())
+		if (m_InstantCamera.IsGrabbing())
 		{
-			if (m_InstantCamera.IsGrabbing())
-			{
-				m_InstantCamera.StopGrabbing();
-				setCurrentState(STOP_STATE);
-				return 0;
-			}
+			m_InstantCamera.StopGrabbing();
+			return 0;
 		}
-	}
-	else
-	{
-		std::cerr << "Camera Device Not Present." << "\n";
 	}
 	return -1;
 }
 
-int baslerCapture::readyHWTrig(int numOfImagesPerTrig)
+int baslerCam::readyHWTrig(int numOfTrig)
 {
 	std::lock_guard<std::mutex> lk(g_mu_Grab);
 
 	//--- set number of image to cache---
-	m_Cache.setNumOfImage(numOfImagesPerTrig);
+	m_Cache.setNumOfImage(numOfTrig);
 
 	//--- set hw trigger mode ----
 	CEnumerationPtr triggerMode(m_InstantCamera.GetNodeMap().GetNode("TriggerSource"));
@@ -495,11 +392,11 @@ int baslerCapture::readyHWTrig(int numOfImagesPerTrig)
 	return 0;
 }
 
-int baslerCapture::getHWTrigImgs(std::vector<cv::Mat> &imgs)
+int baslerCam::getHWTrigImgs(std::vector<cv::Mat> &imgs)
 {
 	std::lock_guard<std::mutex> lk(g_mu_Grab);
 	int status = 0;
-	
+
 	if (!m_IsHWtriggerRunning)
 	{
 		std::cerr << "Not hardwareTrigger Ready.Please ReadyHWTrig before calling this function.\n";
@@ -531,7 +428,7 @@ int baslerCapture::getHWTrigImgs(std::vector<cv::Mat> &imgs)
 	return 0;
 }
 
-int baslerCapture::ExecuteSWTrig(cv::Mat& img)
+int baslerCam::ExecuteSWTrig(cv::Mat& img)
 {
 	std::lock_guard<std::mutex> lk(g_mu_Grab);
 	int status = 0;
@@ -574,9 +471,96 @@ int baslerCapture::ExecuteSWTrig(cv::Mat& img)
 		std::cerr << "image invalid.\n";
 		return -1;
 	}
-	 
+
 	img = imgs[0];
 	return 0;
+}
+
+
+/****************************************
+
+baslerCapture
+
+*****************************************/
+class baslerCapture : public baslerCaptureItf
+{
+public:
+	baslerCapture();
+	virtual ~baslerCapture();
+
+	std::vector<std::string> getAvailableSNs();
+	int openDevices(const std::vector<std::string> &camSNs);
+	int getNumOfWorkingDevices();
+	int configurateExposure(float exposureTime); // microsec
+	int start();
+	int stop();
+	int readyHWTrig(int numOfTrig);
+	int getHWTrigImgs(std::vector<cv::Mat> &imgs);
+	int ExecuteSWTrig(std::vector<cv::Mat> &imgs);
+	int getCurrentState();
+	
+private:
+	int initBaslerCameras();
+	int terminateBaslerCameras();
+
+	int addDevice(const std::string &camSN);
+	int setCurrentState(int state);
+private:
+	// Camera Devices
+	bool m_isInited = false;
+	int m_nTotalDeviceNum = 0;
+	int m_currentState = STOP_STATE;
+	Pylon::DeviceInfoList_t m_listDeviceInfo;
+
+	std::vector<baslerCam*> m_vpWorkingCameras;
+
+};
+baslerCapture::baslerCapture() 
+{
+	try
+	{
+		initBaslerCameras();
+	}
+	catch (GenICam::GenericException &e)
+	{
+		char buff[1024];
+		snprintf(buff, sizeof(buff), "Catch Exception InitAll() error: %s", e.GetDescription());
+		std::string str;
+		str = buff;
+		std::cout << str << "\n";
+	}
+}
+
+
+int baslerCapture::openDevices(const std::vector<std::string> &camSNs)
+{
+	try
+	{
+		for (int i = 0; i < camSNs.size(); ++i)
+		{
+			addDevice(camSNs[i]);
+		}
+	}
+	catch (GenICam::GenericException &e)
+	{
+		char buff[1024];
+		snprintf(buff, sizeof(buff), "Catch Exception OpenDevice: %s", e.GetDescription());
+		std::string str;
+		str = buff;
+		std::cout << str << "\n";
+		return -1;
+	}
+	return 0;
+}
+
+baslerCapture::~baslerCapture()
+{
+	for (int i = 0; i < m_vpWorkingCameras.size(); ++i)
+	{
+		delete m_vpWorkingCameras[i];
+		m_vpWorkingCameras[i] = NULL;
+	}
+	terminateBaslerCameras();
 }
 
 int baslerCapture::setCurrentState(int state)
@@ -591,6 +575,176 @@ int baslerCapture::getCurrentState()
 	return m_currentState;
 }
 
+int baslerCapture::getNumOfWorkingDevices()
+{
+	return m_vpWorkingCameras.size();
+}
+
+std::vector<std::string> baslerCapture::getAvailableSNs()
+{
+	std::vector<std::string> SNlist;
+	for (int i = 0; i < m_nTotalDeviceNum; i++)
+	{
+		DeviceInfoList_t::iterator it = m_listDeviceInfo.begin() + i;
+		std::string strDeviceSN = (*it).GetSerialNumber().c_str();
+		std::cout << "strDeviceSN " << std::to_string(i) << " = " << strDeviceSN << "\n";
+		SNlist.push_back(strDeviceSN);
+	}
+	return SNlist;
+}
+
+int baslerCapture::initBaslerCameras()
+{
+	std::cout << "initBaslerCameras" << "\n";
+	if (g_bPylonAutoInitTerm == false)
+	{
+		Pylon::PylonInitialize();
+		g_bPylonAutoInitTerm = true;
+	}
+
+	Pylon::CTlFactory& tlFactory = CTlFactory::GetInstance();
+
+	//Get Device total view
+	DeviceInfoList_t listDeviceInfo;
+	int nTotalDeviceNum = tlFactory.EnumerateDevices(listDeviceInfo);
+	std::cout << "m_nTotalAvailableDeviceNum = " << nTotalDeviceNum << "\n";
+	m_nTotalDeviceNum = nTotalDeviceNum;
+	m_listDeviceInfo = listDeviceInfo;
+
+	//Print SN from device list
+	getAvailableSNs();
+
+	return 0;
+}
+
+
+int baslerCapture::terminateBaslerCameras()
+{
+	if (g_bPylonAutoInitTerm == true)
+	{
+		Pylon::PylonTerminate();
+		g_bPylonAutoInitTerm = false;
+	}
+
+	return 0;
+}
+
+
+int baslerCapture::addDevice(const std::string &camSN)
+{
+	int status = 0;
+	// locate camera index
+	int camIdx = -1;
+	for (int i = 0; i < m_listDeviceInfo.size(); ++i)
+	{
+		std::string s1(m_listDeviceInfo[i].GetSerialNumber().c_str());
+		if (s1 == camSN)
+		{
+			camIdx = i;
+		}
+	}
+	if (camIdx == -1)
+	{
+		std::cerr << "camSN = " << camSN << "not found.\n";
+		return -1;
+	}
+
+	baslerCam* p_cam = new baslerCam();
+	if (p_cam != NULL)
+	{
+		status = p_cam->init(m_listDeviceInfo[camIdx]);
+		if (status == 0)
+		{
+			m_vpWorkingCameras.push_back(p_cam);
+		}
+	}
+	
+	std::cout << "num of working cameras = " << m_vpWorkingCameras.size() << "\n";
+	for (int i = 0; i < m_vpWorkingCameras.size(); ++i)
+	{
+		std::cout << "working camera serial = " << m_vpWorkingCameras[i]->getSerial() << "\n";
+	}
+	return 0;
+}
+
+int baslerCapture::configurateExposure(float exposureTime)
+{
+	for (int i = 0; i < m_vpWorkingCameras.size(); ++i)
+	{
+		m_vpWorkingCameras[i]->configurateExposure(exposureTime);
+	}
+	return 0;
+}
+int baslerCapture::start()
+{
+	for (int i = 0; i < m_vpWorkingCameras.size(); ++i)
+	{
+		int status = m_vpWorkingCameras[i]->start();
+		if (status != 0)
+		{
+			std::cerr << m_vpWorkingCameras[i]->getSerial() << " fails to start.\n";
+		}
+	}
+	setCurrentState(RUNNING_STATE);
+	return 0;
+}
+int baslerCapture::stop()
+{
+	for (int i = 0; i < m_vpWorkingCameras.size(); ++i)
+	{
+		int status = m_vpWorkingCameras[i]->stop();
+		if (status != 0)
+		{
+			std::cerr << m_vpWorkingCameras[i]->getSerial() << " fails to stop.\n";
+		}
+	}
+	setCurrentState(STOP_STATE);
+	return 0;
+}
+int baslerCapture::readyHWTrig(int numOfTrig)
+{
+	for (int i = 0; i < m_vpWorkingCameras.size(); ++i)
+	{
+		int status = m_vpWorkingCameras[i]->readyHWTrig(numOfTrig);
+		if (status != 0)
+		{
+			std::cerr << m_vpWorkingCameras[i]->getSerial() << " fails to readyHWTrig.\n";
+		}
+	}
+	return 0;
+}
+int baslerCapture::getHWTrigImgs(std::vector<cv::Mat> &imgs)
+{
+	imgs.clear();
+	for (int i = 0; i < m_vpWorkingCameras.size(); ++i)
+	{
+		std::vector<cv::Mat> imgs_per_cam;
+		int status = m_vpWorkingCameras[i]->getHWTrigImgs(imgs_per_cam);
+		if (status != 0)
+		{
+			std::cerr << m_vpWorkingCameras[i]->getSerial() << " fails to getHWTrigImgs.\n";
+			return -1;
+		}
+		imgs.insert(imgs.end(), imgs_per_cam.begin(), imgs_per_cam.end());
+	}
+	return 0;
+}
+int baslerCapture::ExecuteSWTrig(std::vector<cv::Mat> &imgs)
+{
+	imgs.clear();
+	for (int i = 0; i < m_vpWorkingCameras.size(); ++i)
+	{
+		cv::Mat img_per_cam;
+		int status = m_vpWorkingCameras[i]->ExecuteSWTrig(img_per_cam);
+		if (status != 0)
+		{
+			std::cerr << m_vpWorkingCameras[i]->getSerial() << " fails to ExecuteSWTrig.\n";
+			return -1;
+		}
+		imgs.push_back(img_per_cam);
+	}
+	return 0;
+}
 
 std::shared_ptr<baslerCaptureItf> createBaslerCapture()
 {

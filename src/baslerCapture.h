@@ -14,19 +14,20 @@ class baslerCaptureItf
 {
 public:
 	virtual ~baslerCaptureItf() {}
-
-	virtual int configurateExposure(float exposureTime) = 0; // microsec
-
-	virtual int Start() = 0;
-	virtual int Stop() = 0;
-
-	virtual int readyHWTrig(int numOfImagesPerTrig) = 0;
-	virtual int getHWTrigImgs(std::vector<cv::Mat> &imgs) = 0;
-	virtual int ExecuteSWTrig(cv::Mat& img) = 0;
-
-	static const int START_STATE = 1;
+	static const int RUNNING_STATE = 1;
 	static const int STOP_STATE = 0;
+
+	virtual std::vector<std::string> getAvailableSNs() = 0;
+	virtual int openDevices(const std::vector<std::string> &camSNs) = 0;
+	virtual int getNumOfWorkingDevices() = 0;
+	virtual int configurateExposure(float exposureTime) = 0; // microsec
+	virtual int start() = 0;
+	virtual int stop() = 0;
+	virtual int readyHWTrig(int numOfTrig) = 0;
+	virtual int getHWTrigImgs(std::vector<cv::Mat> &imgs) = 0;
+	virtual int ExecuteSWTrig(std::vector<cv::Mat> &imgs) = 0;
 	virtual int getCurrentState() = 0;
+
 };
 
 std::shared_ptr<baslerCaptureItf> createBaslerCapture();

@@ -8,13 +8,13 @@
 
 int liveStreamThread(std::shared_ptr<baslerCaptureItf> pCapture)
 {
-	while (pCapture->getCurrentState() == baslerCaptureItf::START_STATE)
+	while (pCapture->getCurrentState() == baslerCaptureItf::RUNNING_STATE)
 	{
-		cv::Mat mat;
-		int status = pCapture->ExecuteSWTrig(mat);
-		if (status == 0 && !mat.empty())
+		std::vector<cv::Mat> mats;
+		int status = pCapture->ExecuteSWTrig(mats);
+		if (status == 0 && !mats.empty())
 		{
-			cv::imshow("livevideo", mat);
+			cv::imshow("livevideo", mats[0]);
 			cv::waitKey(1);
 		}
 		Sleep(50);
@@ -49,10 +49,14 @@ int main(int argc, char *argv[])
 	}
 
 	std::shared_ptr<baslerCaptureItf> pCapture = createBaslerCapture();
-
+	
+	std::vector<std::string> v_sn;
+	v_sn.push_back("22080226");
+	pCapture->openDevices(v_sn);
+	//pCapture->openDevices(pCapture->getAvailableSNs());
+	
 	pCapture->configurateExposure(exposureTime);
-	pCapture->Start();
-
+	pCapture->start();
 	int status = 0;
 	int counter = 0;
 	std::thread t(liveStreamThread, pCapture);
@@ -65,8 +69,8 @@ int main(int argc, char *argv[])
 
 		if (action == "k")
 		{
-			cv::Mat mat;
-			status = pCapture->ExecuteSWTrig(mat);
+			std::vector<cv::Mat> mats;
+			status = pCapture->ExecuteSWTrig(mats);
 			if (status != 0)
 			{
 				std::cout << "capture fail\n";
@@ -74,11 +78,13 @@ int main(int argc, char *argv[])
 			else
 			{
 				std::cout << "capture successful\n";
-				char buf[1024];
-				snprintf(buf, 1024, "%s/cam_%d_%d.bmp", imageSavePath.c_str(), 0, counter);
-				cv::imwrite(buf, mat);
-				counter++;
-				
+				for (int i = 0; i < mats.size(); ++i)
+				{
+					char buf[1024];
+					snprintf(buf, 1024, "%s/cam_%d_%d.bmp", imageSavePath.c_str(), i, counter);
+					cv::imwrite(buf, mats[i]);
+					counter++;
+				}
 			}
 		}
 		else if (action == "q")
@@ -91,7 +97,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	pCapture->Stop();
+	pCapture->stop();
 	t.join();
 	return 0;
 }
