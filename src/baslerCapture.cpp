@@ -276,7 +276,7 @@ int baslerCam::OpenDevice(CDeviceInfo info)
 	m_InstantCamera.Attach(CTlFactory::GetInstance().CreateDevice(info));
 	m_InstantCamera.Open();
 
-	std::string camModelName = CStringPtr(m_InstantCamera.GetNodeMap().GetNode("DeviceModelName"))->GetValue();
+	std::string camModelName = std::string( CStringPtr(m_InstantCamera.GetNodeMap().GetNode("DeviceModelName"))->GetValue().c_str());
 	std::cout << "camModelName = " << camModelName << "\n";
 
 	//  assign sn
