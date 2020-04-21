@@ -117,7 +117,7 @@ int main(int argc, char *argv[])
 
 	/************ service loop ***************/
 	int status = 0;
-	int counter = 0;
+	int counter = startImgIdx;
 	std::thread t(liveStreamThread, pCapture);
 	while (1)
 	{
