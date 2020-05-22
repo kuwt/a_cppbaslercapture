@@ -7,7 +7,7 @@
 #include <chrono>  // for high_resolution_clock
 
 
-int liveStreamThread(std::shared_ptr<baslerCaptureItf> pCapture)
+int liveStreamThread(std::shared_ptr<baslerCaptureItf> pCapture, int show_size)
 {
 	while (pCapture->getCurrentState() == baslerCaptureItf::RUNNING_STATE)
 	{
@@ -36,7 +36,7 @@ int liveStreamThread(std::shared_ptr<baslerCaptureItf> pCapture)
 
 		std::vector<cv::Mat> resize_mats;
 		/***** resize *****/
-		int targetHeight = 500;
+		int targetHeight = show_size;
 		for (int i = 0; i < mats.size(); ++i)
 		{
 			cv::Mat resizeMat;
@@ -78,8 +78,9 @@ int main(int argc, char *argv[])
 	int startImgIdx = 0;
 	float exposureTime;
 	std::string imageSavePath;
+	int disp_size;
 	// handling para
-	if (argc < 2)
+	if (argc < 4)
 	{
 		// default para
 		startImgIdx = 0;
@@ -91,6 +92,9 @@ int main(int argc, char *argv[])
 
 		imageSavePath = ".";
 		std::cout << "imageSavePath = " << imageSavePath << "\n";
+
+		disp_size = 500;
+		std::cout << "disp_size = " << disp_size << "\n";
 	}
 	else
 	{
@@ -102,6 +106,9 @@ int main(int argc, char *argv[])
 
 		exposureTime = std::atof(std::string(argv[3]).c_str());
 		std::cout << "exposureTime = " << exposureTime << "\n";
+
+		disp_size = std::atof(std::string(argv[4]).c_str());
+		std::cout << "disp_size = " << disp_size << "\n";
 	}
 
 	/****** start camera **********/
@@ -118,7 +125,7 @@ int main(int argc, char *argv[])
 	/************ service loop ***************/
 	int status = 0;
 	int counter = startImgIdx;
-	std::thread t(liveStreamThread, pCapture);
+	std::thread t(liveStreamThread, pCapture, disp_size);
 	while (1)
 	{
 
