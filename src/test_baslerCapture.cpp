@@ -73,52 +73,79 @@ int liveStreamThread(std::shared_ptr<baslerCaptureItf> pCapture, int show_size)
 	return 0;
 }
 
+inline std::vector<std::string> split(const std::string& s, std::string delimiter)
+{
+	std::vector<std::string> result;
+
+	std::size_t current = 0;
+	std::size_t p = s.find_first_of(delimiter, 0);
+
+	while (p != std::string::npos)
+	{
+		result.emplace_back(s, current, p - current);
+		current = p + 1;
+		p = s.find_first_of(delimiter, current);
+	}
+
+	result.emplace_back(s, current);
+
+	return result;
+}
+
 int main(int argc, char *argv[])
 {
 	int startImgIdx = 0;
-	float exposureTime;
-	std::string imageSavePath;
-	int disp_size;
+	float exposureTime = 15550;
+	std::string imageSavePath = ".";
+	int disp_size = 512;
+	bool isUsedAllDevices = true;
+	std::vector<std::string> snlist;
+	
 	// handling para
-	if (argc < 4)
-	{
-		// default para
-		startImgIdx = 0;
-		std::cout << "startImgIdx = " << startImgIdx << "\n";
-
-		std::cout << "using default exposurePara\n";
-		exposureTime = 15550;
-		std::cout << "exposureTime = " << exposureTime << "\n";
-
-		imageSavePath = ".";
-		std::cout << "imageSavePath = " << imageSavePath << "\n";
-
-		disp_size = 500;
-		std::cout << "disp_size = " << disp_size << "\n";
-	}
-	else
+	if (argc > 2) //two parameter
 	{
 		startImgIdx = std::atof(std::string(argv[1]).c_str());
-		std::cout << "startImgIdx = " << startImgIdx << "\n";
-
 		imageSavePath = std::string(argv[2]).c_str();
-		std::cout << "imageSavePath = " << imageSavePath << "\n";
-
+	}
+	if (argc > 3)
+	{
 		exposureTime = std::atof(std::string(argv[3]).c_str());
-		std::cout << "exposureTime = " << exposureTime << "\n";
-
+	}
+	if (argc > 4)
+	{
 		disp_size = std::atof(std::string(argv[4]).c_str());
-		std::cout << "disp_size = " << disp_size << "\n";
+	}
+	if (argc > 5)
+	{
+		isUsedAllDevices = false;
+		std::vector<std::string> tmplist = split(std::string(argv[5]), ";");
+		for (int i = 0; i < tmplist.size(); ++i)
+		{
+			snlist.push_back(tmplist[i].c_str());
+		}
+	}
+
+	std::cout << "imageSavePath = " << imageSavePath << "\n";
+	std::cout << "startImgIdx = " << startImgIdx << "\n";
+	std::cout << "exposuretime = " << exposureTime << "\n";
+	std::cout << "display_size = " << disp_size << "\n";
+	std::cout << "isUsedAllDevices = " << isUsedAllDevices << "\n";
+	for (int i = 0; i < snlist.size(); ++i)
+	{
+		std::cout << "snlist = " << snlist[i] << "\n";
 	}
 
 	/****** start camera **********/
 	std::shared_ptr<baslerCaptureItf> pCapture = createBaslerCapture();
 	
-	//std::vector<std::string> v_sn;
-	//v_sn.push_back("22080226");
-	//pCapture->openDevices(v_sn);
-	pCapture->openDevices(pCapture->getAvailableSNs());
-	
+	if (isUsedAllDevices)
+	{
+		pCapture->openDevices(pCapture->getAvailableSNs());
+	}
+	else
+	{
+		pCapture->openDevices(snlist);
+	}
 	pCapture->configurateExposure(exposureTime);
 	pCapture->start();
 
