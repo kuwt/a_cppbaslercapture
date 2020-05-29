@@ -28,6 +28,47 @@ inline std::vector<std::string> split(const std::string& s, std::string delimite
 	return result;
 }
 
+
+class zmqSocketServerWrapper
+{
+public:
+	zmqSocketServerWrapper(const std::string& server)
+	{
+		m_context = zmq::context_t(1);
+		m_pSock = new zmq::socket_t(m_context, ZMQ_REP); // rep for server
+		std::string server_ip = server;
+		m_pSock->bind(server_ip);
+	};
+	~zmqSocketServerWrapper()
+	{
+		m_pSock->close();
+		delete m_pSock;
+	};
+
+	int send(const std::string& msgStr)
+	{
+		zmq::message_t message(msgStr.size());
+		memcpy(message.data(), msgStr.data(), msgStr.size());
+		m_pSock->send(message);
+		return 0;
+	}
+	int recv(std::string& msgStr)
+	{
+		zmq::message_t request;
+		if (m_pSock->recv(&request, 0))
+		{
+			//std::cout << "receive message...\n";
+			/************ receive message ***************/
+			msgStr = std::string((char*)request.data(), request.size());
+			return 0;
+		}
+		return -1;
+	}
+private:
+	zmq::context_t m_context;
+	zmq::socket_t* m_pSock;
+};
+
 int main(int argc, char *argv[])
 {
 	float exposuretime = 15550; //ms
@@ -63,12 +104,8 @@ int main(int argc, char *argv[])
 
 	/****** start service **********/
 	GOOGLE_PROTOBUF_VERIFY_VERSION;
-	zmq::context_t m_context = zmq::context_t(1);
-	zmq::socket_t *m_pSock;
-	m_pSock = new zmq::socket_t(m_context, ZMQ_REP); // rep for server
 	std::string server_ip = "tcp://*:" + serverport;
-	m_pSock->bind(server_ip);
-
+	zmqSocketServerWrapper sock(server_ip);
 	/****** start camera **********/
 	std::shared_ptr<baslerCaptureItf> pCapture = createBaslerCapture();
 	if (isUsedAllDevices)
@@ -86,12 +123,10 @@ int main(int argc, char *argv[])
 	while (true)
 	{
 		std::cout << "\r" <<"streaming...";  //inplace print
-		zmq::message_t request;
-		if (m_pSock->recv(&request, 0))
+		std::string  msgStr;
+		if (sock.recv(msgStr) == 0)
 		{
-			//std::cout << "receive message...\n";
 			/************ receive message ***************/
-			std::string  msgStr = std::string((char*)request.data(), request.size());
 			if (msgStr == "imageRequest")
 			{
 				/************ service ***************/
@@ -118,20 +153,13 @@ int main(int argc, char *argv[])
 					std::string s = sendPack.SerializeAsString();
 
 					/************ send reply  ***************/
-					zmq::message_t message(s.size());
-					memcpy(message.data(), s.data(), s.size());
-					m_pSock->send(message);
+					sock.send(s);
 				}
-
 			}
 		}
 	}
 	std::cout << "press to continue \n";
 	getchar();
-
-	m_pSock->close();
-	delete m_pSock;
-
 
 	return 0;
 }
