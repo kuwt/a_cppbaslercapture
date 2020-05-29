@@ -87,7 +87,7 @@ int main(int argc, char *argv[])
 	if (argc > 3)
 	{
 		isUsedAllDevices = false;
-		std::vector<std::string> tmplist = split(std::string(argv[5]), ";");
+		std::vector<std::string> tmplist = split(std::string(argv[3]), ";");
 		for (int i = 0; i < tmplist.size(); ++i)
 		{
 			snlist.push_back(tmplist[i].c_str());
