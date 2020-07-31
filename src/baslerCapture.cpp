@@ -425,6 +425,7 @@ int baslerCam::getHWTrigImgs(std::vector<cv::Mat> &imgs)
 	}
 
 	imgs = _imgs;
+	m_IsHWtriggerRunning = false;
 	return 0;
 }
 
