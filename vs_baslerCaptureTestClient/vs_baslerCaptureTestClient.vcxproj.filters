@@ -41,7 +41,7 @@
     <ClCompile Include="..\src\imagepack.pb.cc">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\test_captureServer.cpp">
+    <ClCompile Include="..\src\test_captureClient.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

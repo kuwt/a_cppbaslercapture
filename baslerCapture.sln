@@ -7,6 +7,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "vs_baslerCapture", "vs_basl
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "vs_baslerCaptureServer", "vs_baslerCaptureServer\vs_baslerCaptureServer.vcxproj", "{258156CE-F8A7-4626-A4F8-7DD3871D4A4E}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "vs_baslerCaptureTestClient", "vs_baslerCaptureTestClient\vs_baslerCaptureTestClient.vcxproj", "{C4203A5B-2863-4467-8556-75BDA9C656AE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -31,6 +33,14 @@ Global
 		{258156CE-F8A7-4626-A4F8-7DD3871D4A4E}.Release|x64.Build.0 = Release|x64
 		{258156CE-F8A7-4626-A4F8-7DD3871D4A4E}.Release|x86.ActiveCfg = Release|Win32
 		{258156CE-F8A7-4626-A4F8-7DD3871D4A4E}.Release|x86.Build.0 = Release|Win32
+		{C4203A5B-2863-4467-8556-75BDA9C656AE}.Debug|x64.ActiveCfg = Debug|x64
+		{C4203A5B-2863-4467-8556-75BDA9C656AE}.Debug|x64.Build.0 = Debug|x64
+		{C4203A5B-2863-4467-8556-75BDA9C656AE}.Debug|x86.ActiveCfg = Debug|Win32
+		{C4203A5B-2863-4467-8556-75BDA9C656AE}.Debug|x86.Build.0 = Debug|Win32
+		{C4203A5B-2863-4467-8556-75BDA9C656AE}.Release|x64.ActiveCfg = Release|x64
+		{C4203A5B-2863-4467-8556-75BDA9C656AE}.Release|x64.Build.0 = Release|x64
+		{C4203A5B-2863-4467-8556-75BDA9C656AE}.Release|x86.ActiveCfg = Release|Win32
+		{C4203A5B-2863-4467-8556-75BDA9C656AE}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

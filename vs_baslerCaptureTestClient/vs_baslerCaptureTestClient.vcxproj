@@ -19,9 +19,9 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{258156CE-F8A7-4626-A4F8-7DD3871D4A4E}</ProjectGuid>
+    <ProjectGuid>{C4203A5B-2863-4467-8556-75BDA9C656AE}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-    <RootNamespace>vs_baslerCaptureServer</RootNamespace>
+    <RootNamespace>vs_baslerCaptureTestClient</RootNamespace>
     <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -159,7 +159,7 @@
   <ItemGroup>
     <ClCompile Include="..\src\baslerCapture.cpp" />
     <ClCompile Include="..\src\imagepack.pb.cc" />
-    <ClCompile Include="..\src\test_captureServer.cpp" />
+    <ClCompile Include="..\src\test_captureClient.cpp" />
     <ClCompile Include="stdafx.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
