@@ -8,6 +8,16 @@ Design feature:
 2. With appropriate wrapping the class can perform hardware trigger grabbing
 3. support multiple cams
 
+# Organization
+There are 3 projects in total. All src code is found in ./src
+1. baslerCapture
+2. baslerCaptureServer
+3. baslerCaptureTestClient
+
+baslerCapture is the core project. Normally you need this only.
+
+If you want to setup the cameras as a server, run server project and use the testClient to test the server.
+
 # Installation
 Supports windows and linux.
 
@@ -22,8 +32,7 @@ make
 ./baslerCapture
 ```
 ### windows (support capturing and capture server)
-1. start baslerCapture.sln with vs2015
-2. run test_baslerCapture project
+1. start baslerCapture.sln with vs2015]
+2. put third party library to ./3rb_lib
+2. build and run test_baslerCapture project
 
-# Development
-refers to the test code as the starting point.
