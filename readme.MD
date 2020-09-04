@@ -25,5 +25,5 @@ make
 1. start baslerCapture.sln with vs2015
 2. run test_baslerCapture project
 
-# Degvelopment
+# Development
 refers to the test code as the starting point.
